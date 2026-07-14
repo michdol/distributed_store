@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 use store::KeyValueStore;
 
+mod constants;
 mod store;
 
 #[derive(Deserialize)]
@@ -31,8 +32,12 @@ type SharedState = Arc<AppState>;
 #[tokio::main]
 async fn main() {
     let shared_state: SharedState = Arc::new(AppState {
-        store: Mutex::new(KeyValueStore::new()),
+        store: Mutex::new(KeyValueStore::new("./src/wal.txt".to_string())),
     });
+    {
+        let mut store = shared_state.store.lock().unwrap();
+        store.replay_wal();
+    }
     let router: Router = Router::new()
         .route("/set", post(set_handler))
         .route("/get", post(get_handler))

@@ -1,0 +1,4 @@
+1,SET,key_name,value,
+2,DELETE,key_name,,
+3,SET,key_name,value,
+4,SET,key_name_2,another_value,
