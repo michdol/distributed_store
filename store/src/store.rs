@@ -1,10 +1,8 @@
+use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, Write};
-
-use serde_json::{Value, json};
-use std::collections::HashMap;
-use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 
 use crate::constants::Operation;
@@ -15,7 +13,6 @@ pub struct KeyValueStore {
     flushed_lsn: u64,
     path: String,
     writer: BufWriter<File>,
-    stream: TcpStream,
 }
 
 impl KeyValueStore {
@@ -31,7 +28,6 @@ impl KeyValueStore {
             flushed_lsn: 0,
             store: Arc::new(RwLock::new(HashMap::new())),
             writer: BufWriter::new(file),
-            stream: TcpStream::connect("0.0.0.0:3001").unwrap(),
         }
     }
 
@@ -61,23 +57,15 @@ impl KeyValueStore {
     }
 
     fn write_wal(&mut self, operation: Operation, key: &str, value: &Value) {
-        let line = self.wal_line(operation, key, value);
+        let wal_line = WalLine {
+            lsn: self.flushed_lsn + 1,
+            operation: operation,
+            key: key.to_string(),
+            value: value.clone(),
+        };
+        let line = wal_line.to_string();
         writeln!(self.writer, "{}", line).unwrap();
         self.flushed_lsn += 1;
-        let wal_line = WalLine::new(line);
-        self.stream
-            .write_all(&wal_line.to_bytes().unwrap())
-            .unwrap();
-    }
-
-    fn wal_line(&self, operation: Operation, key: &str, value: &Value) -> String {
-        format!(
-            "{},{},{},{},",
-            self.flushed_lsn + 1,
-            operation.to_string(),
-            key,
-            json!(value)
-        )
     }
 
     pub fn replay_wal(&mut self) {
@@ -85,7 +73,7 @@ impl KeyValueStore {
         let buf_reader = BufReader::new(f);
 
         for line in buf_reader.lines() {
-            let wal_line = WalLine::new(line.unwrap());
+            let wal_line = WalLine::from_string(line.unwrap());
             match wal_line.operation {
                 Operation::Get => {}
                 Operation::Set => {
@@ -99,6 +87,8 @@ impl KeyValueStore {
             }
         }
     }
+
+    pub fn write_from_leader(&mut self) {}
 }
 
 #[cfg(test)]

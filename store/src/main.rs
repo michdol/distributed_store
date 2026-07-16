@@ -1,5 +1,6 @@
 use axum::{
     Router,
+    body::Bytes,
     extract::{Json, State},
     http::StatusCode,
     routing::post,
@@ -7,10 +8,13 @@ use axum::{
 use dotenvy::dotenv;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
-use store::KeyValueStore;
-
 use std::env;
+use std::sync::{Arc, Mutex};
+
+use constants::Operation;
+use store::KeyValueStore;
+use wal_line::WalLine;
+
 mod constants;
 mod store;
 mod wal_line;
@@ -102,6 +106,7 @@ async fn main() {
         .route("/set", post(set_handler))
         .route("/get", post(get_handler))
         .route("/delete", post(delete_handler))
+        .route("/write_wal", post(write_wal))
         .with_state(shared_state.clone());
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", shared_state.server.port))
@@ -154,4 +159,30 @@ async fn delete_handler(
     } else {
         (StatusCode::NOT_FOUND, Json(json!({"error": "Not found"})))
     }
+}
+
+async fn write_wal(State(state): State<SharedState>, body: Bytes) -> (StatusCode, String) {
+    if state.server.is_leader {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Leader doesn't accept incoming wal".to_string(),
+        );
+    }
+    let wal = WalLine::from_bytes(&body).unwrap();
+    let mut store = state.store.lock().unwrap();
+    match wal.operation {
+        Operation::Set => {
+            store.set(wal.key, wal.value);
+        }
+        Operation::Delete => {
+            store.delete(&wal.key);
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("Can't proceed with operation {}", wal.operation).to_string(),
+            );
+        }
+    }
+    (StatusCode::NOT_FOUND, "Not found".to_string())
 }

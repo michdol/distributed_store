@@ -1,7 +1,8 @@
+use serde_json::{Value, json};
 use std::str::FromStr;
 
 use crate::constants::Operation;
-use serde_json::{Value, json};
+
 #[derive(Debug)]
 pub struct WalLine {
     pub lsn: u64,
@@ -11,7 +12,7 @@ pub struct WalLine {
 }
 
 impl WalLine {
-    pub fn new(line: String) -> Self {
+    pub fn from_string(line: String) -> Self {
         let parts = line.split(",");
         let parts = parts.collect::<Vec<&str>>();
         let operation = Operation::from_str(&parts[1].to_lowercase()).unwrap();
@@ -21,6 +22,16 @@ impl WalLine {
             key: parts[2].to_string(),
             value: json!(parts[3]),
         }
+    }
+
+    pub fn to_string(&self) -> String {
+        format!(
+            "{},{},{},{},",
+            self.lsn,
+            self.operation.to_string(),
+            self.key,
+            json!(self.value)
+        )
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
@@ -79,7 +90,7 @@ mod tests {
     #[test]
     fn test_to_bytes() {
         let line = String::from("1,SET,key_name,value,");
-        let wl = WalLine::new(line);
+        let wl = WalLine::from_string(line);
         let wl_bytes = wl.to_bytes().expect("Serialization should have succeeded");
 
         let mut expected = Vec::new();
@@ -97,7 +108,7 @@ mod tests {
     #[test]
     fn test_to_bytes_and_back() {
         let line = String::from("1,SET,key_name,value,");
-        let wl = WalLine::new(line);
+        let wl = WalLine::from_string(line);
         let wl_bytes = wl.to_bytes().expect("Serialization should have succeeded");
 
         let wl_from_bytes = WalLine::from_bytes(&wl_bytes).unwrap();
@@ -106,5 +117,14 @@ mod tests {
         assert_eq!(wl_from_bytes.operation, Operation::Set);
         assert_eq!(wl_from_bytes.key, String::from("key_name"));
         assert_eq!(wl_from_bytes.value, json!("value"));
+    }
+
+    #[test]
+    fn test_to_string() {
+        let line = String::from("1,Set,key_name,value,");
+        let wl = WalLine::from_string(line.clone());
+
+        let string_line = wl.to_string();
+        assert_eq!(string_line, "1,Set,key_name,\"value\",".to_string());
     }
 }
