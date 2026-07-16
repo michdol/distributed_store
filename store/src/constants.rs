@@ -1,11 +1,30 @@
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Operation {
     Get,
     Set,
     Delete,
+}
+
+impl Operation {
+    pub fn as_byte(&self) -> u8 {
+        match self {
+            Operation::Get => 0,
+            Operation::Set => 1,
+            Operation::Delete => 2,
+        }
+    }
+
+    pub fn from_byte(byte: u8) -> Result<Self, String> {
+        match byte {
+            0 => Ok(Self::Get),
+            1 => Ok(Self::Set),
+            2 => Ok(Self::Delete),
+            other => Err(format!("Unknown operation {}", other)),
+        }
+    }
 }
 
 impl FromStr for Operation {

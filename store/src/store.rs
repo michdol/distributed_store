@@ -1,19 +1,21 @@
 use std::fs::{File, OpenOptions};
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter, Write};
-use std::str::FromStr;
 
 use serde_json::{Value, json};
 use std::collections::HashMap;
+use std::net::TcpStream;
 use std::sync::{Arc, RwLock};
 
 use crate::constants::Operation;
+use crate::wal_line::WalLine;
 
 pub struct KeyValueStore {
     store: Arc<RwLock<HashMap<String, Value>>>,
     flushed_lsn: u64,
     path: String,
     writer: BufWriter<File>,
+    stream: TcpStream,
 }
 
 impl KeyValueStore {
@@ -29,6 +31,7 @@ impl KeyValueStore {
             flushed_lsn: 0,
             store: Arc::new(RwLock::new(HashMap::new())),
             writer: BufWriter::new(file),
+            stream: TcpStream::connect("0.0.0.0:3001").unwrap(),
         }
     }
 
@@ -61,6 +64,10 @@ impl KeyValueStore {
         let line = self.wal_line(operation, key, value);
         writeln!(self.writer, "{}", line).unwrap();
         self.flushed_lsn += 1;
+        let wal_line = WalLine::new(line);
+        self.stream
+            .write_all(&wal_line.to_bytes().unwrap())
+            .unwrap();
     }
 
     fn wal_line(&self, operation: Operation, key: &str, value: &Value) -> String {
@@ -90,28 +97,6 @@ impl KeyValueStore {
                     self.flushed_lsn = wal_line.lsn;
                 }
             }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct WalLine {
-    pub lsn: u64,
-    pub operation: Operation,
-    pub key: String,
-    pub value: Value,
-}
-
-impl WalLine {
-    pub fn new(line: String) -> Self {
-        let parts = line.split(",");
-        let parts = parts.collect::<Vec<&str>>();
-        let operation = Operation::from_str(&parts[1].to_lowercase()).unwrap();
-        Self {
-            lsn: parts[0].parse::<u64>().unwrap(),
-            operation: operation,
-            key: parts[2].to_string(),
-            value: json!(parts[3]),
         }
     }
 }

@@ -1,9 +1,3 @@
-/// Leader and followers
-/// Leader forwards writes to followers
-/// open socket to all followers and push WAL
-/// fire-and-forget
-/// replication lag
-/// sync vs async
 use axum::{
     Router,
     extract::{Json, State},
@@ -19,6 +13,7 @@ use store::KeyValueStore;
 use std::env;
 mod constants;
 mod store;
+mod wal_line;
 
 #[derive(Deserialize)]
 pub struct SetRequest {
